@@ -1,0 +1,27 @@
+# Core
+python-dotenv>=1.0.0
+
+# Streamlit UI
+streamlit>=1.31.0
+
+# LangChain ecosystem
+langchain>=0.1.17
+langchain-community>=0.0.34
+langchain-google-genai>=1.0.3
+
+# Google Gemini
+google-generativeai>=0.4.1
+
+# Vector DB / Embeddings
+faiss-cpu>=1.7.4
+
+# Data handling
+pandas>=2.0.0
+numpy>=1.24.0
+
+# PDF / Text loaders
+pypdf>=4.0.0
+unstructured>=0.12.6
+
+# Utils
+tqdm>=4.66.0
