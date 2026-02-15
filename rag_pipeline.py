@@ -5,12 +5,12 @@ Author: Implementation for Amit Nagaich
 
 import os
 from typing import List, Dict
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Qdrant
-from langchain.document_loaders import WebBaseLoader, TextLoader
-from langchain.schema import Document
+from langchain_community.document_loaders import WebBaseLoader, TextLoader
+from langchain_core.documents import Document
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 import logging
