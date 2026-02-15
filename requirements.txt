@@ -1,7 +1,7 @@
 # Core LangChain with proper structure
-langchain==0.0.350
-langchain-community==0.0.20
-langchain-core==0.1.23
+langchain>=0.1.16
+langchain-core>=0.1.45
+langchain-community>=0.0.32
 langchain-text-splitters==0.3.0
 
 # Google Gemini Integration
