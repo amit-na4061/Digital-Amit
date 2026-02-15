@@ -13,9 +13,9 @@ import os
 from datetime import datetime
 from rag_pipeline import AmitChatbotRAG
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
-from langchain_core.prompts import PromptTemplate
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 import logging
 
 # Setup logging
@@ -144,33 +144,21 @@ def get_or_create_qa_chain(session_id: str):
         
         # Create LLM
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # or "gemini-1.5-pro"
+            model="gemini-1.5-flash",
             google_api_key=api_key,
             temperature=0.7,
             convert_system_message_to_human=True
         )
         
-        # Create prompt
-        prompt = PromptTemplate(
-            template=SYSTEM_PROMPT,
-            input_variables=["context", "question"]
-        )
+        # Create prompt template
+        prompt_template = SYSTEM_PROMPT.replace("{context}", "{context}").replace("{question}", "{input}")
+        prompt = ChatPromptTemplate.from_template(prompt_template)
         
-        # Create memory
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            output_key="answer"
-        )
+        # Create document chain
+        document_chain = create_stuff_documents_chain(llm, prompt)
         
-        # Create chain
-        qa_chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=rag_pipeline.get_retriever(k=4),
-            memory=memory,
-            return_source_documents=True,
-            combine_docs_chain_kwargs={"prompt": prompt}
-        )
+        # Create retrieval chain
+        qa_chain = create_retrieval_chain(rag_pipeline.get_retriever(k=4), document_chain)
         
         qa_chains[session_id] = qa_chain
     
@@ -255,9 +243,9 @@ async def chat(request: ChatRequest):
             qa_chain = get_or_create_qa_chain(session_id)
             
             # Get response
-            result = qa_chain({"question": request.message})
+            result = qa_chain.invoke({"input": request.message})
             response_text = result["answer"]
-            source_docs = result.get("source_documents", [])
+            source_docs = result.get("context", [])
             
         except ValueError as e:
             # Fallback to simple retrieval if no API key
