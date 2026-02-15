@@ -13,9 +13,9 @@ import os
 from datetime import datetime
 from rag_pipeline import AmitChatbotRAG
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains import ConversationalRetrievalChain
+from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 import logging
 
 # Setup logging
