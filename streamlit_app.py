@@ -5,9 +5,10 @@ Using Qdrant and Google Gemini API
 
 import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
-from langchain_core.prompts import PromptTemplate
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage
 from rag_pipeline import AmitChatbotRAG
 import os
 
@@ -48,8 +49,38 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# System prompt for the chatbot
-SYSTEM_PROMPT = """You are Amit Nagaich, a Manager - ML & Analytics with 14+ years of experience in Data Science and Analytics.
+@st.cache_resource
+def initialize_rag():
+    """Initialize RAG pipeline (cached)"""
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    
+    rag = AmitChatbotRAG(
+        collection_name="amit_knowledge_base",
+        use_google_embeddings=bool(google_api_key),
+        qdrant_url=qdrant_url,
+        qdrant_api_key=qdrant_api_key
+    )
+    
+    # Check if vector store exists
+    if os.path.exists("./qdrant_storage"):
+        rag.setup_embeddings(google_api_key=google_api_key)
+        rag.load_vector_store()
+    else:
+        st.warning("Vector store not found. Creating new one...")
+        rag.setup_embeddings(google_api_key=google_api_key)
+        documents = rag.prepare_documents()
+        rag.create_vector_store(documents)
+    
+    return rag
+
+@st.cache_resource
+def initialize_llm(_rag, use_gemini=True):
+    """Initialize LLM and create QA chain"""
+    
+    # Create custom prompt
+    prompt_template = """You are Amit Nagaich, a Manager - ML & Analytics with 14+ years of experience in Data Science and Analytics.
 
 PERSONALITY TRAITS:
 - Professional yet approachable and friendly
@@ -94,48 +125,11 @@ IMPORTANT:
 - Stay professional but friendly and approachable
 - If asked about topics outside your expertise, acknowledge the limits of your knowledge
 
-Use the following context to answer questions accurately:
-{context}
+Context: {context}
 
-Question: {question}
+Question: {input}
 
 Answer as Amit would, drawing from the context and your professional background:"""
-
-@st.cache_resource
-def initialize_rag():
-    """Initialize RAG pipeline (cached)"""
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    qdrant_url = os.getenv("QDRANT_URL")
-    qdrant_api_key = os.getenv("QDRANT_API_KEY")
-    
-    rag = AmitChatbotRAG(
-        collection_name="amit_knowledge_base",
-        use_google_embeddings=bool(google_api_key),
-        qdrant_url=qdrant_url,
-        qdrant_api_key=qdrant_api_key
-    )
-    
-    # Check if vector store exists
-    if os.path.exists("./qdrant_storage"):
-        rag.setup_embeddings(google_api_key=google_api_key)
-        rag.load_vector_store()
-    else:
-        st.warning("Vector store not found. Creating new one...")
-        rag.setup_embeddings(google_api_key=google_api_key)
-        documents = rag.prepare_documents()
-        rag.create_vector_store(documents)
-    
-    return rag
-
-@st.cache_resource
-def initialize_llm(_rag, use_gemini=True):
-    """Initialize LLM and create QA chain"""
-    
-    # Create custom prompt
-    prompt = PromptTemplate(
-        template=SYSTEM_PROMPT,
-        input_variables=["context", "question"]
-    )
     
     if use_gemini:
         # Using Google Gemini
@@ -145,7 +139,7 @@ def initialize_llm(_rag, use_gemini=True):
             return None
             
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # or "gemini-1.5-pro" for better results
+            model="gemini-1.5-flash",
             google_api_key=api_key,
             temperature=0.7,
             convert_system_message_to_human=True
@@ -154,24 +148,16 @@ def initialize_llm(_rag, use_gemini=True):
         st.warning("Gemini API not configured. Please set GOOGLE_API_KEY.")
         return None
     
-    # Create conversation memory
-    memory = ConversationBufferMemory(
-        memory_key="chat_history",
-        return_messages=True,
-        output_key="answer"
-    )
+    # Create prompt
+    prompt = ChatPromptTemplate.from_template(prompt_template)
     
-    # Create QA chain
-    qa_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=_rag.get_retriever(k=4),
-        memory=memory,
-        return_source_documents=True,
-        combine_docs_chain_kwargs={"prompt": prompt},
-        verbose=True
-    )
+    # Create document chain
+    document_chain = create_stuff_documents_chain(llm, prompt)
     
-    return qa_chain
+    # Create retrieval chain
+    retrieval_chain = create_retrieval_chain(_rag.get_retriever(k=4), document_chain)
+    
+    return retrieval_chain
 
 def format_sources(sources):
     """Format source documents for display"""
@@ -277,9 +263,9 @@ def main():
                     qa_chain = initialize_llm(rag, use_gemini=True)
                     if qa_chain:
                         try:
-                            result = qa_chain({"question": prompt})
+                            result = qa_chain.invoke({"input": prompt})
                             response = result["answer"]
-                            sources = result.get("source_documents", [])
+                            sources = result.get("context", [])
                             
                             st.markdown(response)
                             
